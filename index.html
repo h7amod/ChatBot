@@ -24,6 +24,10 @@
 </div>
 
 <script>
+// >>>>>>> CHANGE THIS LINE ONLY <<<<<<<
+const API_URL = "https://YOUR-NGROK-ID.ngrok-free.app/ask";
+// Example: https://ab12-123-45-678-90.ngrok-free.app/ask
+
 function addMessage(text, sender) {
     const msg = document.createElement("div");
     msg.className = "msg " + sender;
@@ -39,18 +43,25 @@ async function send() {
     addMessage(question, "user");
     document.getElementById("box").value = "";
 
-    addMessage("Thinking...", "bot");
+    const thinkingMsg = document.createElement("div");
+    thinkingMsg.className = "msg bot";
+    thinkingMsg.textContent = "Thinking...";
+    document.getElementById("chat").appendChild(thinkingMsg);
+    thinkingMsg.scrollIntoView();
 
-    const res = await fetch("http://127.0.0.1:8000/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question })
-    });
+    try {
+        const res = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question })
+        });
 
-    const data = await res.json();
-
-    const botMsg = document.querySelector(".bot:last-child");
-    botMsg.textContent = data.answer;
+        const data = await res.json();
+        thinkingMsg.textContent = data.answer || "No response.";
+    } catch (err) {
+        thinkingMsg.textContent = "Error connecting to server.";
+        console.error(err);
+    }
 }
 </script>
 
