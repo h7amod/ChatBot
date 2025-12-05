@@ -132,11 +132,18 @@
 function addMessage(text, sender) {
     const msg = document.createElement("div");
     msg.className = "msg " + sender;
-    msg.textContent = text;
-    document.getElementById("chat").appendChild(msg);
-    document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
-}
 
+    // Convert URLs to <a> tags
+    const linked = text.replace(
+        /(https?:\/\/[^\s]+)/g,
+        '<a href="$1" target="_blank" style="color:#4da3ff;">$1</a>'
+    );
+
+    msg.innerHTML = linked;
+
+    document.getElementById("chat").appendChild(msg);
+    msg.scrollIntoView();
+}
 async function send() {
     const question = document.getElementById("box").value.trim();
     if (!question) return;
