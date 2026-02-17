@@ -300,7 +300,7 @@ async function send() {
   document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
 
   try {
-    const res = await fetch("PASTE THE LINK HERE, DON'T FORGET /ask", {
+    const res = await fetch("https://8f49-37-39-226-107.ngrok-free.app/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question })
