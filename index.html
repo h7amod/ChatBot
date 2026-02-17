@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>AUM Chatbot</title>
+    <title>AUM Student Assistant</title>
 
     <style>
         body {
@@ -31,11 +30,25 @@
 
         #header {
             background: #1f1f23;
-            padding: 18px;
-            font-size: 20px;
+            padding: 14px 16px;
+            border-bottom: 1px solid #2b2b2f;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+
+            font-size: 18px;
             font-weight: bold;
             text-align: center;
-            border-bottom: 1px solid #2b2b2f;
+        }
+
+        #header img {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            object-fit: cover;
+            border: 1px solid #3f3f46;
         }
 
         #chat {
@@ -53,6 +66,8 @@
             font-size: 15px;
             line-height: 1.45;
             animation: fadeIn 0.2s ease-out;
+            white-space: normal;
+            word-wrap: break-word;
         }
 
         .user {
@@ -68,6 +83,24 @@
             border: 1px solid #3f3f46;
             margin-right: auto;
             border-bottom-left-radius: 4px;
+        }
+
+        /* Make lists inside bot bubbles look good */
+        .bot ul, .bot ol {
+            margin: 8px 0 0 18px;
+            padding: 0;
+        }
+
+        .bot li {
+            margin: 4px 0;
+        }
+
+        .bot p {
+            margin: 0 0 8px 0;
+        }
+
+        .bot p:last-child {
+            margin-bottom: 0;
         }
 
         @keyframes fadeIn {
@@ -111,14 +144,22 @@
         #send:hover {
             background: #2563eb;
         }
+
+        /* links */
+        .msg a {
+            color:#4da3ff;
+            text-decoration: underline;
+        }
     </style>
 </head>
 
 <body>
 
 <div id="chat-container">
-    
-    <div id="header">AUM Chatbot</div>
+    <div id="header">
+        <img src="NaviLearn.jpeg" alt="AUM Logo">
+        <span>NaviLearn Student Assistant</span>
+    </div>
 
     <div id="chat"></div>
 
@@ -126,52 +167,152 @@
         <input id="box" placeholder="Ask something..." onkeydown="if(event.key==='Enter') send()">
         <button id="send" onclick="send()">Send</button>
     </div>
-
 </div>
 
 <script>
-function addMessage(text, sender) {
-    const msg = document.createElement("div");
-    msg.className = "msg " + sender;
+/* -------------------------
+   Safe text -> HTML helpers
+--------------------------*/
 
-    // Convert URLs to <a> tags
-    const linked = text.replace(
-        /(https?:\/\/[^\s]+)/g,
-        '<a href="$1" target="_blank" style="color:#4da3ff;">$1</a>'
-    );
-
-    msg.innerHTML = linked;
-
-    document.getElementById("chat").appendChild(msg);
-    msg.scrollIntoView();
+// Escape HTML so bot output can't inject tags/scripts.
+function escapeHtml(str) {
+  return (str || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
-async function send() {
-    const question = document.getElementById("box").value.trim();
-    if (!question) return;
 
-    addMessage(question, "user");
-    document.getElementById("box").value = "";
+// Convert URLs to <a> tags AFTER escaping.
+function linkify(escapedText) {
+  return escapedText.replace(
+    /(https?:\/\/[^\s]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+}
 
-    const thinking = document.createElement("div");
-    thinking.className = "msg bot";
-    thinking.textContent = "Thinking…";
-    document.getElementById("chat").appendChild(thinking);
-    document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
+/*
+  Render plain text into paragraphs + lists.
+  Supports:
+    - bullet lines starting with "- " or "* "
+    - numbered lines starting with "1. " "2. " etc.
+  Everything is safely escaped.
+*/
+function renderRichText(rawText) {
+  const text = (rawText || "").replace(/\r\n/g, "\n");
+  const lines = text.split("\n");
 
-    try {
-        const res = await fetch("https://ce6e67dbd973.ngrok-free.app/ask", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ question })
-        });
+  let html = "";
+  let inUl = false;
+  let inOl = false;
+  let paragraph = [];
 
-        const data = await res.json();
-        thinking.remove();
-        addMessage(data.answer, "bot");
-    } catch (error) {
-        thinking.remove();
-        addMessage("Connection error.", "bot");
+  function flushParagraph() {
+    if (paragraph.length) {
+      const joined = paragraph.join(" ").trim();
+      if (joined) {
+        const escaped = linkify(escapeHtml(joined));
+        html += `<p>${escaped}</p>`;
+      }
+      paragraph = [];
     }
+  }
+
+  function closeLists() {
+    if (inUl) { html += "</ul>"; inUl = false; }
+    if (inOl) { html += "</ol>"; inOl = false; }
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    // Blank line => paragraph break + close lists
+    if (!line) {
+      flushParagraph();
+      closeLists();
+      continue;
+    }
+
+    // Bullet line
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      flushParagraph();
+      if (inOl) { html += "</ol>"; inOl = false; }
+      if (!inUl) { html += "<ul>"; inUl = true; }
+      const item = linkify(escapeHtml(line.slice(2).trim()));
+      html += `<li>${item}</li>`;
+      continue;
+    }
+
+    // Numbered line: "1. something"
+    const m = line.match(/^(\d+)\.\s+(.*)$/);
+    if (m) {
+      flushParagraph();
+      if (inUl) { html += "</ul>"; inUl = false; }
+      if (!inOl) { html += "<ol>"; inOl = true; }
+      const item = linkify(escapeHtml(m[2].trim()));
+      html += `<li>${item}</li>`;
+      continue;
+    }
+
+    // Normal line => part of paragraph
+    closeLists();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  closeLists();
+
+  return html || `<p>${linkify(escapeHtml(rawText || ""))}</p>`;
+}
+
+/* -------------------------
+   Chat UI
+--------------------------*/
+
+function addMessage(text, sender) {
+  const msg = document.createElement("div");
+  msg.className = "msg " + sender;
+
+  if (sender === "bot") {
+    msg.innerHTML = renderRichText(text);
+  } else {
+    // user message: escape + linkify, but keep as one paragraph
+    msg.innerHTML = `<p>${linkify(escapeHtml(text))}</p>`;
+  }
+
+  document.getElementById("chat").appendChild(msg);
+  msg.scrollIntoView();
+}
+
+async function send() {
+  const input = document.getElementById("box");
+  const question = input.value.trim();
+  if (!question) return;
+
+  addMessage(question, "user");
+  input.value = "";
+
+  const thinking = document.createElement("div");
+  thinking.className = "msg bot";
+  thinking.innerHTML = "<p>Thinking…</p>";
+  document.getElementById("chat").appendChild(thinking);
+  document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
+
+  try {
+    const res = await fetch("PASTE THE LINK HERE, DON'T FORGET /ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question })
+    });
+
+    const data = await res.json();
+    thinking.remove();
+    addMessage(data.answer || "No answer returned.", "bot");
+  } catch (error) {
+    thinking.remove();
+    addMessage("Connection error.", "bot");
+  }
 }
 </script>
 
